@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+.superpowers/
+agent-tools/
+coverage/
+.DS_Store
