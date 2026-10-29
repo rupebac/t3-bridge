@@ -80,7 +80,9 @@ Server name: `t3bridge`.
 
 ## Tools
 
-`environmentId` defaults to the configured environment. New threads use `runtimeMode: "approval-required"` unless you pass another mode. `full-access` is used only when the caller passes it. Launches use the project root. If a project's default checkout is a worktree, `start_thread` returns `worktree_unsupported`.
+`environmentId` defaults to the configured environment. New threads use `runtimeMode: "auto"` (T3's auto-review mode: Claude permission mode `auto`, Codex `on-request` with the `auto_review` reviewer, so no manual approvals) unless you pass another mode. Accepted values are `approval-required`, `auto-accept-edits`, `auto`, and `full-access`. `full-access` is used only when the caller passes it. Launches use the project root. If a project's default checkout is a worktree, `start_thread` returns `worktree_unsupported`.
+
+`modelSelection` on `start_thread` and `set_thread_model` is `{ instanceId, model, options? }`. `options` uses T3's array shape and is forwarded as given, for example `[{ "id": "reasoningEffort", "value": "high" }, { "id": "serviceTier", "value": "default" }]`.
 
 Reads:
 

@@ -48,7 +48,7 @@ test("retry resends the journaled command id for the same operationId", async ()
   await rm(dir, { recursive: true, force: true });
 });
 
-test("launch defaults to approval-required and steer pins the active run", async () => {
+test("launch defaults to auto runtime mode and steer pins the active run", async () => {
   const dir = await mkdtemp(join(tmpdir(), "t3-bridge-launch-"));
   const store = await Store.load(dir);
   const calls: Array<{ method: string; payload: Record<string, unknown> }> = [];
@@ -74,7 +74,8 @@ test("launch defaults to approval-required and steer pins the active run", async
     instructions: "say hi",
     modelSelection: { instanceId: "grok", model: "grok-4" },
   });
-  assert.equal(calls[0]?.payload.runtimeMode, "approval-required");
+  assert.equal(calls[0]?.payload.runtimeMode, "auto");
+  assert.deepEqual(calls[0]?.payload.modelSelection, { instanceId: "grok", model: "grok-4" });
   assert.equal((calls[0]?.payload.workspaceStrategy as { type: string }).type, "root");
   assert.equal(launched.runId, "run-new");
   assert.equal(JSON.stringify(launched).includes("future"), false);
@@ -156,4 +157,48 @@ test("unary RPC ignores extra success fields and hides failure bodies", async ()
     wss.close();
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
+});
+
+test("launch keeps an explicit runtimeMode and model options reach T3", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "t3-bridge-options-"));
+  const store = await Store.load(dir);
+  const calls: Array<{ method: string; payload: Record<string, unknown> }> = [];
+  const rpc = async (_environmentId: string, method: string, payload: Record<string, unknown>) => {
+    calls.push({ method, payload });
+    if (method === "orchestration.launchThread") {
+      const messageId = (payload.initialMessage as { messageId: string }).messageId;
+      return { threadId: payload.threadId, projection: { runs: [{ id: "run-new", userMessageId: messageId }] } };
+    }
+    return { sequence: 1 };
+  };
+  const mutations = new Mutations(store, rpc);
+  const options = [{ id: "reasoningEffort", value: "high" }, { id: "serviceTier", value: "default" }];
+  await mutations.launchThread({
+    operationId: "op-launch-approval",
+    environmentId: "env-1",
+    projectId: "proj-1",
+    title: "Strict",
+    instructions: "say hi",
+    modelSelection: { instanceId: "codex", model: "gpt-6-astra", options },
+    runtimeMode: "approval-required",
+  });
+  assert.equal(calls[0]?.payload.runtimeMode, "approval-required");
+  assert.deepEqual(calls[0]?.payload.modelSelection, { instanceId: "codex", model: "gpt-6-astra", options });
+
+  await mutations.setThreadModel({
+    operationId: "op-model-options",
+    environmentId: "env-1",
+    threadId: "thread-1",
+    modelSelection: { instanceId: "codex", model: "gpt-6-astra", options },
+  });
+  assert.deepEqual(calls.at(-1)?.payload.modelSelection, { instanceId: "codex", model: "gpt-6-astra", options });
+
+  await mutations.setThreadModel({
+    operationId: "op-model-empty",
+    environmentId: "env-1",
+    threadId: "thread-1",
+    modelSelection: { instanceId: "grok", model: "grok-4", options: [] },
+  });
+  assert.deepEqual(calls.at(-1)?.payload.modelSelection, { instanceId: "grok", model: "grok-4" });
+  await rm(dir, { recursive: true, force: true });
 });

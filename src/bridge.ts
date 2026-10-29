@@ -39,6 +39,12 @@ export interface BridgePorts {
 interface ModelInput {
   instanceId: string;
   model: string;
+  options?: ModelOption[];
+}
+
+interface ModelOption {
+  id: string;
+  value: string | boolean | number;
 }
 
 export class Bridge {

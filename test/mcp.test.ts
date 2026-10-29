@@ -37,6 +37,7 @@ const toolNames = [
 ];
 
 test("mcp server lists the stable tool surface", async () => {
+  let seenModelInput: unknown;
   const listed = toThreadListResult({
     environmentId: "env-1",
     threads: [{
@@ -75,7 +76,7 @@ test("mcp server lists the stable tool surface", async () => {
     startThread: async () => ({ bridgeVersion: "0.1.0", kind: "start_thread", operationId: "op", environmentId: "env-1", threadId: "thread-1", runId: "run-1", accepted: true, watched: true }),
     sendMessage: async () => ({ bridgeVersion: "0.1.0", kind: "send_message", operationId: "op", environmentId: "env-1", threadId: "thread-1", runId: null, accepted: true, watched: true }),
     interruptThread: async () => ({ bridgeVersion: "0.1.0", kind: "interrupt_thread", operationId: "op", environmentId: "env-1", threadId: "thread-1", runId: "run-1", accepted: true, watched: false }),
-    setThreadModel: async () => ({ bridgeVersion: "0.1.0", kind: "set_thread_model", operationId: "op", environmentId: "env-1", threadId: "thread-1", runId: null, accepted: true, watched: false }),
+    setThreadModel: async (input: unknown) => { seenModelInput = input; return { bridgeVersion: "0.1.0", kind: "set_thread_model", operationId: "op", environmentId: "env-1", threadId: "thread-1", runId: null, userMessageId: null, accepted: true, watched: false }; },
     setThreadRuntime: async () => ({ bridgeVersion: "0.1.0", kind: "set_thread_runtime", operationId: "op", environmentId: "env-1", threadId: "thread-1", runId: null, accepted: true, watched: false }),
     renameThread: async () => ({ bridgeVersion: "0.1.0", kind: "rename_thread", operationId: "op", environmentId: "env-1", threadId: "thread-1", runId: null, accepted: true, watched: false }),
     watchThread: async () => ({ watchId: "w1" }),
@@ -96,6 +97,13 @@ test("mcp server lists the stable tool surface", async () => {
     const structured = result.structuredContent as { threads: Array<{ threadId: string }> };
     assert.equal(structured.threads[0]?.threadId, "thread-1");
     assert.equal(JSON.stringify(structured).includes("session"), false);
+    const options = [{ id: "reasoningEffort", value: "high" }, { id: "serviceTier", value: "default" }];
+    const modelResult = await client.callTool({
+      name: "set_thread_model",
+      arguments: { operationId: "op-model", threadId: "thread-1", modelSelection: { instanceId: "codex", model: "gpt-6-astra", options } },
+    });
+    assert.equal(modelResult.isError, undefined, JSON.stringify(modelResult.content));
+    assert.deepEqual((seenModelInput as { modelSelection: unknown }).modelSelection, { instanceId: "codex", model: "gpt-6-astra", options });
   } finally {
     await client.close();
   }

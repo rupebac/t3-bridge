@@ -11,6 +11,29 @@ const interactionModes = ["default", "plan"] as const;
 type RuntimeMode = (typeof runtimeModes)[number];
 type FollowMode = "auto" | "queue" | "steer" | "restart";
 
+/** Runtime mode for new threads when the caller omits one: T3's auto-review mode, no manual approvals. */
+export const DEFAULT_LAUNCH_RUNTIME_MODE: RuntimeMode = "auto";
+
+export interface ModelOption {
+  id: string;
+  value: string | boolean | number;
+}
+
+export interface ModelSelection {
+  instanceId: string;
+  model: string;
+  options?: ModelOption[];
+}
+
+/** Forward instanceId/model plus T3 model options (reasoningEffort, serviceTier, ...) when present. */
+export function toModelSelection(input: ModelSelection): ModelSelection {
+  const selection: ModelSelection = { instanceId: input.instanceId, model: input.model };
+  if (Array.isArray(input.options) && input.options.length > 0) {
+    selection.options = input.options.map(option => ({ id: option.id, value: option.value }));
+  }
+  return selection;
+}
+
 export interface ActiveRun {
   id: string;
   status: string;
@@ -47,11 +70,11 @@ export class Mutations {
     projectId: string;
     title: string;
     instructions: string;
-    modelSelection: { instanceId: string; model: string };
+    modelSelection: ModelSelection;
     runtimeMode?: RuntimeMode;
     interactionMode?: (typeof interactionModes)[number];
   }): Promise<MutationOutcome> {
-    const runtimeMode = input.runtimeMode ?? "approval-required";
+    const runtimeMode = input.runtimeMode ?? DEFAULT_LAUNCH_RUNTIME_MODE;
     const interactionMode = input.interactionMode ?? "default";
     return this.dispatch({
       kind: "start_thread",
@@ -67,7 +90,7 @@ export class Mutations {
           threadId,
           projectId: input.projectId,
           title: input.title,
-          modelSelection: { instanceId: input.modelSelection.instanceId, model: input.modelSelection.model },
+          modelSelection: toModelSelection(input.modelSelection),
           runtimeMode,
           interactionMode,
           creationSource: "mcp",
@@ -135,10 +158,10 @@ export class Mutations {
     operationId: string;
     environmentId: string;
     threadId: string;
-    modelSelection: { instanceId: string; model: string };
+    modelSelection: ModelSelection;
   }): Promise<MutationOutcome> {
     return this.simpleCommand(input, "set_thread_model", "thread.model-selection.set", {
-      modelSelection: { instanceId: input.modelSelection.instanceId, model: input.modelSelection.model },
+      modelSelection: toModelSelection(input.modelSelection),
     });
   }
 

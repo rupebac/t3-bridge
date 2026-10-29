@@ -10,11 +10,17 @@ const operationId = z.string().min(1).max(200);
 const offset = z.number().int().min(0).max(1_000_000).optional();
 const limit = z.number().int().min(1).max(100).optional();
 const runtimeMode = z.enum(["approval-required", "auto-accept-edits", "auto", "full-access"]);
+const modelOption = z.object({
+  id: z.string().min(1),
+  value: z.union([z.string(), z.boolean(), z.number()]),
+});
 const modelSelection = z.object({
   instanceId: z.string().min(1),
   model: z.string().min(1),
+  options: z.array(modelOption).optional(),
 });
 const bridgeVersion = z.literal(BRIDGE_VERSION);
+export type ModelSelectionInput = z.infer<typeof modelSelection>;
 
 const environmentListOutput = {
   bridgeVersion,
@@ -182,7 +188,7 @@ export interface ToolBridge {
     projectId: string;
     title: string;
     instructions: string;
-    modelSelection?: { instanceId: string; model: string };
+    modelSelection?: ModelSelectionInput;
     runtimeMode?: "approval-required" | "auto-accept-edits" | "auto" | "full-access";
     interactionMode?: "default" | "plan";
     watch?: boolean;
@@ -200,7 +206,7 @@ export interface ToolBridge {
     wakeTarget?: string;
   }): Promise<MutationAck>;
   interruptThread(input: { operationId: string; environmentId?: string; threadId: string; runId?: string }): Promise<MutationAck>;
-  setThreadModel(input: { operationId: string; environmentId?: string; threadId: string; modelSelection: { instanceId: string; model: string } }): Promise<MutationAck>;
+  setThreadModel(input: { operationId: string; environmentId?: string; threadId: string; modelSelection: ModelSelectionInput }): Promise<MutationAck>;
   setThreadRuntime(input: { operationId: string; environmentId?: string; threadId: string; runtimeMode: "approval-required" | "auto-accept-edits" | "auto" | "full-access" }): Promise<MutationAck>;
   renameThread(input: { operationId: string; environmentId?: string; threadId: string; title: string }): Promise<MutationAck>;
   watchThread(input: { environmentId?: string; threadId: string; projectId?: string | null; title?: string | null; runId?: string | null; notifyOnAttention?: boolean; wakeTarget?: string }): Promise<{ watchId: string; wakeTarget: string }>;
@@ -308,7 +314,7 @@ export function createServer(bridge: ToolBridge): McpServer {
   }, async input => guard(() => bridge.getThread(input)));
 
   server.registerTool("start_thread", {
-    description: "Create a thread in the project root and send the first instructions. runtimeMode defaults to approval-required. full-access is used only when you pass it. A webhook watch is armed unless watch is false. Pass wakeTarget when more than one webhook is registered. Worktree projects are rejected. Pass a new operationId and reuse it to retry.",
+    description: "Create a thread in the project root and send the first instructions. runtimeMode defaults to auto (provider auto-review, no manual approvals). full-access is used only when you pass it. A webhook watch is armed unless watch is false. Pass wakeTarget when more than one webhook is registered. Worktree projects are rejected. Pass a new operationId and reuse it to retry.",
     inputSchema: {
       operationId,
       environmentId: id.optional(),
