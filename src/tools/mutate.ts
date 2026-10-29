@@ -53,6 +53,40 @@ const journalSchema = z.object({
 
 const interruptible = new Set(["preparing", "queued", "starting", "running", "waiting"]);
 
+/** Matches the trailer the bridge appends when a send has a wakeTarget. */
+export const WAKE_MARKER_PATTERN = /\[t3b-wake target=(\S+) thread=(\S+) op=(\S+)\]/;
+
+/** `[t3b-wake target=<wakeTarget> thread=<threadId> op=<operationId>]` */
+export function wakeMarker(wakeTarget: string, threadId: string, operationId: string): string {
+  return `[t3b-wake target=${wakeTarget} thread=${threadId} op=${operationId}]`;
+}
+
+/** Appends the wake marker as the final line. Text is unchanged without a wakeTarget. */
+export function withWakeMarker(text: string, wakeTarget: string | undefined, threadId: string, operationId: string): string {
+  if (!wakeTarget) return text;
+  return `${text}\n${wakeMarker(wakeTarget, threadId, operationId)}`;
+}
+
+const markerUnsafe = /[\s\[\]]/;
+
+function checkWakeTarget(wakeTarget: string | undefined, operationId: string, threadId?: string): string | undefined {
+  if (wakeTarget === undefined || wakeTarget === "") return undefined;
+  if (markerUnsafe.test(wakeTarget)) {
+    throw new BridgeError("invalid_input", "wakeTarget must not contain whitespace or brackets.");
+  }
+  if (markerUnsafe.test(operationId)) {
+    throw new BridgeError("invalid_input", "operationId must not contain whitespace or brackets when wakeTarget is set.");
+  }
+  if (threadId !== undefined && markerUnsafe.test(threadId)) {
+    throw new BridgeError("invalid_input", "threadId must not contain whitespace or brackets when wakeTarget is set.");
+  }
+  return wakeTarget;
+}
+
+function wakeFingerprint(wakeTarget: string | undefined): string[] {
+  return wakeTarget ? [`wake:${wakeTarget}`] : [];
+}
+
 export function isInterruptibleRun(status: string): boolean {
   return interruptible.has(status);
 }
@@ -64,7 +98,7 @@ export class Mutations {
     private activeRun: (environmentId: string, threadId: string) => Promise<ActiveRun | null> = async () => null,
   ) {}
 
-  launchThread(input: {
+  async launchThread(input: {
     operationId: string;
     environmentId: string;
     projectId: string;
@@ -73,14 +107,16 @@ export class Mutations {
     modelSelection: ModelSelection;
     runtimeMode?: RuntimeMode;
     interactionMode?: (typeof interactionModes)[number];
+    wakeTarget?: string;
   }): Promise<MutationOutcome> {
     const runtimeMode = input.runtimeMode ?? DEFAULT_LAUNCH_RUNTIME_MODE;
     const interactionMode = input.interactionMode ?? "default";
+    const wakeTarget = checkWakeTarget(input.wakeTarget, input.operationId);
     return this.dispatch({
       kind: "start_thread",
       operationId: input.operationId,
       environmentId: input.environmentId,
-      fingerprint: stable(["start_thread", input.environmentId, input.projectId, input.title, input.instructions, input.modelSelection, runtimeMode, interactionMode]),
+      fingerprint: stable(["start_thread", input.environmentId, input.projectId, input.title, input.instructions, input.modelSelection, runtimeMode, interactionMode, ...wakeFingerprint(wakeTarget)]),
       method: "orchestration.launchThread",
       build: () => {
         const threadId = randomUUID();
@@ -95,26 +131,28 @@ export class Mutations {
           interactionMode,
           creationSource: "mcp",
           workspaceStrategy: { type: "root" },
-          initialMessage: { messageId, text: input.instructions, attachments: [] },
+          initialMessage: { messageId, text: withWakeMarker(input.instructions, wakeTarget, threadId, input.operationId), attachments: [] },
         };
       },
       runId: (command, result) => launchRunId(command, result),
     });
   }
 
-  sendFollowUp(input: {
+  async sendFollowUp(input: {
     operationId: string;
     environmentId: string;
     threadId: string;
     instructions: string;
     mode?: FollowMode;
+    wakeTarget?: string;
   }): Promise<MutationOutcome> {
     const mode = input.mode ?? "auto";
+    const wakeTarget = checkWakeTarget(input.wakeTarget, input.operationId, input.threadId);
     return this.dispatch({
       kind: "send_message",
       operationId: input.operationId,
       environmentId: input.environmentId,
-      fingerprint: stable(["send_message", input.environmentId, input.threadId, input.instructions, mode]),
+      fingerprint: stable(["send_message", input.environmentId, input.threadId, input.instructions, mode, ...wakeFingerprint(wakeTarget)]),
       method: "orchestration.dispatchCommand",
       build: async () => {
         const dispatchMode = await this.dispatchMode(input.environmentId, input.threadId, mode);
@@ -123,7 +161,7 @@ export class Mutations {
           commandId: randomUUID(),
           threadId: input.threadId,
           messageId: randomUUID(),
-          text: input.instructions,
+          text: withWakeMarker(input.instructions, wakeTarget, input.threadId, input.operationId),
           attachments: [],
           createdBy: "agent",
           creationSource: "mcp",

@@ -142,6 +142,14 @@ Pass `wakeTarget` on `start_thread`, `send_message`, and `watch_thread`.
 - If you omit it and none are registered, the watch still arms as `default` and the event is queued with `webhook_not_configured`.
 - If you omit it and more than one webhook is registered, the arm fails with `wake_target_required`. The bridge does not guess.
 
+When `start_thread` or `send_message` is called with an explicit `wakeTarget`, the bridge adds one final line to the prompt it sends to T3, after a newline:
+
+```
+[t3b-wake target=<wakeTarget> thread=<threadId> op=<operationId>]
+```
+
+`threadId` is the real T3 thread id (minted by the bridge for `start_thread`), and `op` is the `operationId` of that call. This applies to every `send_message` mode (`auto`, `queue`, `steer`, `restart`). A completion hook on the T3 host can match `\[t3b-wake target=(\S+) thread=(\S+) op=(\S+)\]` in the turn's user message to fire only for bridge sends aimed at that target. Without `wakeTarget`, the prompt is sent unchanged, even when the watch resolves to the only registered webhook. With a `wakeTarget`, the bridge rejects (`invalid_input`) a `wakeTarget`, `operationId`, or `threadId` that contains whitespace or brackets. The marker is part of the journaled command, so a retry with the same `operationId` sends the same text, and a retry with a different `wakeTarget` is an `operation_conflict`. Watches still match runs by `userMessageId`, not by text.
+
 Delivery is `POST` with `Authorization: Bearer <secret>`, an `Idempotency-Key` equal to `eventId`, and a body like this. `eventId` is a hash of the event, run id, and status, so a retry keeps the same key. Expiry events hash the watch id. `wakeTarget` is included so a log can show which name was chosen.
 
 ```json

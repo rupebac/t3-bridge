@@ -314,7 +314,7 @@ export function createServer(bridge: ToolBridge): McpServer {
   }, async input => guard(() => bridge.getThread(input)));
 
   server.registerTool("start_thread", {
-    description: "Create a thread in the project root and send the first instructions. runtimeMode defaults to auto (provider auto-review, no manual approvals). full-access is used only when you pass it. A webhook watch is armed unless watch is false. Pass wakeTarget when more than one webhook is registered. Worktree projects are rejected. Pass a new operationId and reuse it to retry.",
+    description: "Create a thread in the project root and send the first instructions. runtimeMode defaults to auto (provider auto-review, no manual approvals). full-access is used only when you pass it. A webhook watch is armed unless watch is false. Pass wakeTarget when more than one webhook is registered. With wakeTarget, a final prompt line [t3b-wake target=<wakeTarget> thread=<threadId> op=<operationId>] is appended for host-side completion hooks. Worktree projects are rejected. Pass a new operationId and reuse it to retry.",
     inputSchema: {
       operationId,
       environmentId: id.optional(),
@@ -332,7 +332,7 @@ export function createServer(bridge: ToolBridge): McpServer {
   }, async input => guard(() => bridge.startThread(input)));
 
   server.registerTool("send_message", {
-    description: "Send a follow-up. mode is auto, queue, steer, or restart. The ack includes userMessageId. restart does not pin the interrupted run. A webhook watch is armed unless watch is false. Pass wakeTarget when more than one webhook is registered. Reuse operationId to retry the same send.",
+    description: "Send a follow-up. mode is auto, queue, steer, or restart. The ack includes userMessageId. restart does not pin the interrupted run. A webhook watch is armed unless watch is false. Pass wakeTarget when more than one webhook is registered. With wakeTarget, a final prompt line [t3b-wake target=<wakeTarget> thread=<threadId> op=<operationId>] is appended (all modes). Reuse operationId to retry the same send.",
     inputSchema: {
       operationId,
       environmentId: id.optional(),

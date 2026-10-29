@@ -136,6 +136,7 @@ export class Bridge {
       modelSelection,
       ...(input.runtimeMode ? { runtimeMode: input.runtimeMode } : {}),
       ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
+      ...(input.wakeTarget ? { wakeTarget: input.wakeTarget } : {}),
     });
     const armed = await this.maybeWatch(input.watch, {
       environmentId,
@@ -170,6 +171,7 @@ export class Bridge {
       threadId: input.threadId,
       instructions: input.instructions,
       ...(input.mode ? { mode: input.mode } : {}),
+      ...(input.wakeTarget ? { wakeTarget: input.wakeTarget } : {}),
     });
     const armed = await this.maybeWatch(input.watch, {
       environmentId,
